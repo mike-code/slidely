@@ -9,6 +9,11 @@ $container['renderer'] = function ($c) {
     return new Slim\Views\PhpRenderer($settings['template_path']);
 };
 
+$container['application'] = function ($c)
+{
+	return json_decode(json_encode($c->get('settings')['application']));
+};
+
 // monolog
 $container['logger'] = function ($c) {
     $settings = $c->get('settings')['logger'];
