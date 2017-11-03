@@ -1,0 +1,24 @@
+version: "3"
+
+services:
+  web:
+    image: nginx
+    ports:
+      - 80:80
+    volumes:
+      - ./src:/var/www/html
+      - ./nginx.conf:/etc/nginx/nginx.conf
+    links:
+      - phpfpm
+
+  phpfpm:
+    image: phalconphp/php-fpm:7
+    volumes:
+        - ./src:/var/www/html:cached
+        - ./php.ini:/etc/php/7.0/fpm/php.ini
+
+  composer:
+    image: library/composer
+    command: install
+    volumes:
+      - ./src:/app
