@@ -2,30 +2,22 @@
 
 namespace App\Controllers;
 
-class YoutubeController
+class YoutubeController extends GenericController
 {
     private $video_id;
-    private $app;
-    private $logger;
-
-    function __construct($app, $logger)
-    {
-        $this->app    = $app;
-        $this->logger = $logger;
-    }
 
     public function parseUri(string $uri)
     {
         $pattern = "/^(?:https?:\/\/)?(?:www\.|m\.)?(?:youtu\.be|youtube\.com(?:\/watch\?v=|\/v\/|\/&v=\/))([\w-]{10,12})$/";
 
-        if(!preg_match_all($pattern, $uri, $matches)) throw new \App\LogicException('Invalid youtube URI');
+        preg_match_all($pattern, $uri, $matches) or $this->throwLogicalException('Invalid youtube URI');
 
         $this->video_id = $matches[1][0];
     }
 
     public function getVideoInfo()
     {
-        if(!$this->video_id) throw new \App\LogicException('Video ID is null');
+        $this->video_id or $this->throwLogicalException('Video ID is null');
 
         if($this->app->debug && file_exists($this->app->cacheDir . $this->video_id))
         {
@@ -33,20 +25,13 @@ class YoutubeController
             return $response;
         }
 
-        $response = \Requests::get("https://youtube.com/watch?v={$this->video_id}");
-
-        if(!$response->success) throw new \App\LogicException("Could not get video page of [{$this->video_id}][{$response->status_code}]");
-
-        if(!preg_match("/\W['\"]?t['\"]?: ?['\"](.+?)['\"]/", $response->body, $out))
-            throw new \App\LogicException("Could not get some-unknown-boolean [{$this->video_id}][{$response->status_code}]");
-
-        $unknown = $out[1];
-
         $watchurl = urlencode("https://www.youtube.com/watch?v={$this->video_id}");
 
-        $response = \Requests::get("https://youtube.com/get_video_info?video_id={$this->video_id}&el=\$el&ps=default&hl=en_US&eurl={$watchurl}&t={$unknown}");
+        $fullurl = "https://youtube.com/get_video_info?video_id={$this->video_id}&ps=default&eurl=&gl=US&hl=en&eurl={$watchurl}";
 
-        if(!$response->success) throw new \App\LogicException("Could not get video info [{$this->video_id}][{$response->status_code}]");
+        $response = \Requests::get($fullurl);
+
+        $response->success or $this->throwLogicalException("Could not get video info [{$this->video_id}][{$response->status_code}]");
 
         parse_str($response->body, $result);
 
@@ -55,7 +40,7 @@ class YoutubeController
             $status    = $result['status']    ?? 'STATUS_NULL';
             $errorcode = $result['errorcode'] ?? 'ERRORCODE_NULL';
 
-            throw new \App\LogicException("Video status not OK  [{$status}][{$errorcode}]");
+            $this->throwLogicalException("Video status not OK  [{$status}][{$errorcode}]");
         }
 
         if($this->app->debug)
@@ -70,7 +55,7 @@ class YoutubeController
     {
         $video_info = $this->getVideoInfo();
 
-        if(!$video_info['url_encoded_fmt_stream_map']) throw new \App\LogicException('Missing url_encoded_fmt_stream_map key');
+        $video_info['url_encoded_fmt_stream_map'] ?? $this->throwLogicalException('Missing url_encoded_fmt_stream_map key');
 
         $streams = explode(',', $video_info['url_encoded_fmt_stream_map']);
 
@@ -83,27 +68,32 @@ class YoutubeController
     {
         $streams = $this->parseStreams();
 
+        count($streams) or $this->throwLogicalException('No streams found?? Is it even possible??');
+
+        // Get first stream (slightly vulnerable, might not be a video)
+        // We don't allow to be picky about video choice
         parse_str($streams[0], $result);
 
-        echo 'URL:', PHP_EOL;
-        echo $result['url'], PHP_EOL;
-        echo 'SIG:', PHP_EOL;
-        $result['s'] = '9B2F8B22A54C6E6AC09CEB01D905AA3D494FBEAD.1F321FEC9F8A56CDD0E27D7822E828F532C22760760';
-        echo $result['s'], PHP_EOL;
-        // echo $MY_S, PHP_EOL;
+        $url  = $result['url'] ?? $this->throwLogicalException('Missing url parameter in video_response stream object');
 
-        $jsFilecontent = $this->getBaseJsFileContent();
+        preg_match("/signature=([\w]+\.[\w]+)/", $url, $out);
+        $usig = $out[1]        ?? null;
+        $csig = $result['s']   ?? null;
 
-        file_put_contents($this->app->cacheDir . "js.js", $jsFilecontent);
+        !$csig && !$usig and $this->throwLogicalException('Missing both ciphered and unciphered signature parameters in video_response stream object');
 
-        $functions = $this->getCipherFunctions($jsFilecontent);
-        $t_name    = $this->getTranformationObjectName($functions);
-        $map       = $this->getCipherMap($jsFilecontent, $t_name);
+        if(!$usig)
+        {
+            $jsFilecontent = $this->getBaseJsFileContent();
 
-        $sig = $this->decipherSignature($result['s'], $functions, $map);
+            $functions = $this->getCipherFunctions($jsFilecontent);
+            $t_name    = $this->getTranformationObjectName($functions);
+            $map       = $this->getCipherMap($jsFilecontent, $t_name);
 
-        echo 'FULL:', PHP_EOL;
-        echo $result['url'] . '&signature=' . $sig, PHP_EOL;
+            $usig = $this->decipherSignature($csig, $functions, $map);
+        }
+
+        echo $url . '&signature=' . $usig, PHP_EOL;
     }
 
     private function decipherSignature($cipheredSignature, $cipherFunctions, $map)
@@ -112,8 +102,7 @@ class YoutubeController
 
         foreach($cipherFunctions as $function)
         {
-            if(!preg_match("/\.([a-zA-Z0-9]+?)\((?:[a-zA-Z0-9]+?)\,([0-9]+?)\)/", $function, $out))
-                throw new \App\LogicException('Could not parse function call');
+            preg_match("/\.([a-zA-Z0-9]+?)\((?:[a-zA-Z0-9]+?)\,([0-9]+?)\)/", $function, $out) or $this->throwLogicalException('Could not parse function call');
 
             $functionId    = $out[1];
             $functionParam = $out[2];
@@ -128,16 +117,16 @@ class YoutubeController
     {
         $response = \Requests::get("https://youtube.com/watch?v={$this->video_id}");
 
-        if(!$response->success) throw new \App\LogicException("Could not get video page of [{$this->video_id}][{$response->status_code}]");
+        $response->success or $this->throwLogicalException("Could not get video page of [{$this->video_id}][{$response->status_code}]");
 
         //<script src="/yts/jsbin/player-vflg6eF8s/en_US/base.js"  name="player/base" ></script>
         $pattern = "/\/yts\/.+?player.+?base\.js/m";
 
-        if(!preg_match_all($pattern, $response->body, $matches)) throw new \App\LogicException('Could not find base.js file location');
+        preg_match_all($pattern, $response->body, $matches) or $this->throwLogicalException('Could not find base.js file location');
 
         $response = \Requests::get("https://youtube.com{$matches[0][0]}");
 
-        if(!$response->success) throw new \App\LogicException("Could not get base.js file [{$matches[0][0]}][{$response->status_code}]");
+        $response->success or $this->throwLogicalException("Could not get base.js file [{$matches[0][0]}][{$response->status_code}]");
 
         return $response->body;
     }
@@ -145,14 +134,14 @@ class YoutubeController
     private function getCipherFunctions($script)
     {
         // Get primary function name
-        if(!preg_match("/\"signature\",\s?([a-zA-Z0-9$]+)\(/", $script, $out))
-            throw new \App\LogicException('Could not find primary decipher function');
+        preg_match("/\"signature\",\s?([a-zA-Z0-9$]+)\(/", $script, $out)
+            or $this->throwLogicalException('Could not find primary decipher function');
 
         $pFunc = $out[1];
 
         // Get cipher transformation functions
-        if(!preg_match("/{$pFunc}=function\(\w\){[a-z=\.\(\"\)]*;(.*);(?:.+)}/", $script, $out))
-            throw new \App\LogicException('Could not get transformation functions');
+        preg_match("/{$pFunc}=function\(\w\){[a-z=\.\(\"\)]*;(.*);(?:.+)}/", $script, $out)
+            or $this->throwLogicalException('Could not get transformation functions');
 
         $transformationFunctions = explode(';', $out[1]);
 
@@ -162,8 +151,8 @@ class YoutubeController
     private function getTranformationObjectName($transformationFunctions)
     {
         // Get transformation object name
-        if(!preg_match("/([a-zA-Z0-9$]+?)\./", $transformationFunctions[0], $out))
-            throw new \App\LogicException('Could not get transformation object name');
+        preg_match("/([a-zA-Z0-9$]+?)\./", $transformationFunctions[0], $out)
+            or $this->throwLogicalException('Could not get transformation object name');
 
         $tObjName = $out[1];
 
@@ -173,8 +162,8 @@ class YoutubeController
     private function getCipherMap($script, $transformation_object_name)
     {
         // Get tranformation object (that contains declarations for those functions)
-        if(!preg_match("/var {$transformation_object_name}=\{(.+?)\};/ms", $script, $out))
-            throw new \App\LogicException('Could not get transformation object');
+        preg_match("/var {$transformation_object_name}=\{(.+?)\};/ms", $script, $out)
+            or $this->throwLogicalException('Could not get transformation object');
 
         $tObj = explode(',_n_', trim(str_replace("\n", '_n_', $out[1])));
 
@@ -191,8 +180,7 @@ class YoutubeController
             preg_match("/splice|slice/", $fBody) and $map[$fName] = 'splice';
             preg_match("/reverse/", $fBody) and $map[$fName] = 'reverse';
 
-            if(!isset($map[$fName]))
-                throw new \App\LogicException('Unrecognized transformation function');
+            $map[$fName] ?? $this->throwLogicalException('Unrecognized transformation function');
         }
 
         return $map;
