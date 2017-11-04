@@ -16,7 +16,7 @@ return [
             'cacheDir'       => BASE_PATH . '/cache/',
             'logsDir'        => BASE_PATH . '/logs/',
             'controllersDir' => APP_PATH . '/Controllers/',
-            'debug'          => true,
+            'debug'          => false,
         ],
 
         // Monolog settings

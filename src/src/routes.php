@@ -13,12 +13,15 @@ $app->get('/api/youtube2mp3', function (Request $request, Response $response, ar
 
         if(!$uri) throw new \App\LogicException('Url not specified');
 
-        $youtube = new \App\Controllers\YoutubeController($this->application);
+        $youtube = new \App\Controllers\YoutubeController($this->application, $this->logger);
 
         $youtube->parseUri($uri);
 
-//        return $response->withJson($youtube->getVideoInfo());
-       $youtube->parseStreams();
+       // return $response->withJson($youtube->getVideoInfo());
+       // $youtube->parseStreams();
+       //
+
+       $youtube->dl();
 
         die('OK');
     }
