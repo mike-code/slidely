@@ -15,24 +15,9 @@ class YoutubeController extends GenericController
         $this->video_id = $matches[1][0];
     }
 
-    public function parseStreams()
-    {
-        $video_info = $this->getVideoInfo();
-
-        $video_info['url_encoded_fmt_stream_map'] ?? $this->throwLogicalException('Missing url_encoded_fmt_stream_map key');
-
-        $streams = explode(',', $video_info['url_encoded_fmt_stream_map']);
-
-        //array_walk($streams, function(&$s) { $s = urldecode($s); });
-
-        return $streams;
-    }
-
     public function dl()
     {
         $streams = $this->parseStreams();
-
-        count($streams) or $this->throwLogicalException('No streams found?? Is it even possible??');
 
         // Get first stream (slightly vulnerable, might not be a video)
         // We don't allow to be picky about video choice
@@ -60,6 +45,30 @@ class YoutubeController extends GenericController
         $downloadUrl = "{$url}&signature={$usig}";
 
         echo $downloadUrl, PHP_EOL;
+    }
+
+    public function parseStreams()
+    {
+        $video_info = $this->getVideoInfo();
+
+        $video_info['url_encoded_fmt_stream_map'] ?? $this->throwLogicalException('Missing url_encoded_fmt_stream_map key');
+
+        $streams = explode(',', $video_info['url_encoded_fmt_stream_map']);
+
+        count($streams) or $this->throwLogicalException('No streams found?? Is it even possible??');
+
+        $streams = $this->decodeStringQueryStrings($streams);
+
+        print_r($streams);exit;
+
+        return $streams;
+    }
+
+    private function decodeStringQueryStrings($streams)
+    {
+        array_walk($streams, function(&$i){ parse_str($i, $arr); array_walk($arr, function(&$x) { $x = urldecode($x); }); $i = $arr; });
+
+        return $streams;
     }
 
     private function getVideoInfo()
