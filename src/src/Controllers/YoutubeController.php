@@ -15,42 +15,6 @@ class YoutubeController extends GenericController
         $this->video_id = $matches[1][0];
     }
 
-    public function getVideoInfo()
-    {
-        $this->video_id or $this->throwLogicalException('Video ID is null');
-
-        if($this->app->debug && file_exists($this->app->cacheDir . $this->video_id))
-        {
-            parse_str(file_get_contents($this->app->cacheDir . $this->video_id), $response);
-            return $response;
-        }
-
-        $watchurl = urlencode("https://www.youtube.com/watch?v={$this->video_id}");
-
-        $fullurl = "https://youtube.com/get_video_info?video_id={$this->video_id}&ps=default&eurl=&gl=US&hl=en&eurl={$watchurl}";
-
-        $response = \Requests::get($fullurl);
-
-        $response->success or $this->throwLogicalException("Could not get video info [{$this->video_id}][{$response->status_code}]");
-
-        parse_str($response->body, $result);
-
-        if(!isset($result['status']) || $result['status'] !== 'ok')
-        {
-            $status    = $result['status']    ?? 'STATUS_NULL';
-            $errorcode = $result['errorcode'] ?? 'ERRORCODE_NULL';
-
-            $this->throwLogicalException("Video status not OK  [{$status}][{$errorcode}]");
-        }
-
-        if($this->app->debug)
-        {
-            file_put_contents($this->app->cacheDir . $this->video_id, $response->body);
-        }
-
-        return $result;
-    }
-
     public function parseStreams()
     {
         $video_info = $this->getVideoInfo();
@@ -93,7 +57,45 @@ class YoutubeController extends GenericController
             $usig = $this->decipherSignature($csig, $functions, $map);
         }
 
-        echo $url . '&signature=' . $usig, PHP_EOL;
+        $downloadUrl = "{$url}&signature={$usig}";
+
+        echo $downloadUrl, PHP_EOL;
+    }
+
+    private function getVideoInfo()
+    {
+        $this->video_id or $this->throwLogicalException('Video ID is null');
+
+        if($this->app->debug && file_exists($this->app->cacheDir . $this->video_id))
+        {
+            parse_str(file_get_contents($this->app->cacheDir . $this->video_id), $response);
+            return $response;
+        }
+
+        $watchurl = urlencode("https://www.youtube.com/watch?v={$this->video_id}");
+
+        $fullurl = "https://youtube.com/get_video_info?video_id={$this->video_id}&ps=default&eurl=&gl=US&hl=en&eurl={$watchurl}";
+
+        $response = \Requests::get($fullurl);
+
+        $response->success or $this->throwLogicalException("Could not get video info [{$this->video_id}][{$response->status_code}]");
+
+        parse_str($response->body, $result);
+
+        if(!isset($result['status']) || $result['status'] !== 'ok')
+        {
+            $status    = $result['status']    ?? 'STATUS_NULL';
+            $errorcode = $result['errorcode'] ?? 'ERRORCODE_NULL';
+
+            $this->throwLogicalException("Video status not OK  [{$status}][{$errorcode}]");
+        }
+
+        if($this->app->debug)
+        {
+            file_put_contents($this->app->cacheDir . $this->video_id, $response->body);
+        }
+
+        return $result;
     }
 
     private function decipherSignature($cipheredSignature, $cipherFunctions, $map)
