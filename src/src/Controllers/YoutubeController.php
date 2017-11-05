@@ -18,18 +18,18 @@ class YoutubeController extends GenericController
     public function dl()
     {
         $streams = $this->parseStreams();
+        $stream  = $this->getOptimalStream($streams);
 
-        // Get first stream (slightly vulnerable, might not be a video)
-        // We don't allow to be picky about video choice
-        parse_str($streams[0], $result);
+        print_r($stream);
 
-        $url  = $result['url'] ?? $this->throwLogicalException('Missing url parameter in video_response stream object');
-
+        $url  = $stream['url'] ?? $this->throwLogicalException('Missing url parameter in video_response stream object');
         preg_match("/signature=([\w]+\.[\w]+)/", $url, $out);
         $usig = $out[1]        ?? null;
-        $csig = $result['s']   ?? null;
+        $csig = $stream['s']   ?? null;
 
         !$csig && !$usig and $this->throwLogicalException('Missing both ciphered and unciphered signature parameters in video_response stream object');
+
+        $this->isVideoTooLong($stream) and $this->throwLogicalException("Video length cannot exceed {$this->app->maxVideoLength} minutes");
 
         if(!$usig)
         {
@@ -42,9 +42,13 @@ class YoutubeController extends GenericController
             $usig = $this->decipherSignature($csig, $functions, $map);
         }
 
-        $downloadUrl = "{$url}&signature={$usig}";
+        $downloadUri = "{$url}&signature={$usig}";
 
-        echo $downloadUrl, PHP_EOL;
+        $myId = md5($usig);
+
+        $this->downloadVideo($downloadUri, $myId);
+
+        echo $downloadUri, PHP_EOL;
     }
 
     public function parseStreams()
@@ -59,9 +63,32 @@ class YoutubeController extends GenericController
 
         $streams = $this->decodeStringQueryStrings($streams);
 
-        print_r($streams);exit;
-
         return $streams;
+    }
+
+    private function isVideoTooLong($stream)
+    {
+        preg_match("/dur=([0-9]+)\.?/", $stream['url'], $out) or $this->throwLogicalException('Cannot determine video length');
+        $len = $out[1];
+
+        return $len > $this->app->maxVideoLength * 60;
+    }
+
+    private function downloadVideo($uri, $id)
+    {
+        \Requests::get($uri, [], ['filename' => "{$this->app->videoDir}{$id}", 'timeout' => 300000]);
+    }
+
+    private function getOptimalStream($streams)
+    {
+        // I'm looking for videos with itag 18 or 22 if not found
+        // All other itags are not supported rn as 99% of the videos should
+        // contain either of those
+
+        foreach($streams as $stream) if($stream['itag'] == 18) return $stream;
+        foreach($streams as $stream) if($stream['itag'] == 22) return $stream;
+
+        $this->throwLogicalException('No stream with itag 18/22 found');
     }
 
     private function decodeStringQueryStrings($streams)

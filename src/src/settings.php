@@ -15,8 +15,11 @@ return [
         'application' => [
             'cacheDir'       => BASE_PATH . '/cache/',
             'logsDir'        => BASE_PATH . '/logs/',
+            'videoDir'       => BASE_PATH . '/downloads/video/',
+            'audioDir'       => BASE_PATH . '/downloads/audio/',
             'controllersDir' => APP_PATH . '/Controllers/',
             'debug'          => false,
+            'maxVideoLength' => 60, // in minutes
         ],
 
         // Monolog settings
