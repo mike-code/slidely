@@ -1,4 +1,6 @@
 /vendor/
 /cache/*
 /logs/*
+/public/downloads/audio/*
+/public/downloads/video/*
 !/logs/README.md

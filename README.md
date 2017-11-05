@@ -4,14 +4,14 @@
 ## Install Docker
 `wget -qO- https://get.docker.com/ | sh`
 
-## Install Docker Compose
-`pip install docker-compose`
-
 ## Clone the project
 `git clone https://github.com/mike-code/slidely`
 
 ## Set permissions
 `chown 1000:1000 -R src`
 
-## Start it
-`docker-compose up [-d]`
+## Init docker swarm (or join existing)
+`docker swarm init`
+
+## Deploy the stack
+`docker stack deploy -c docker-compose.yml slidely`
