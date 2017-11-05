@@ -34,8 +34,10 @@ abstract class GenericController
      *
      * @return void
      */
-    public function throwLogicalException($message)
+    public function throwLogicalException($message, $logentry = '')
     {
+        $logentry and $this->logger->error($logentry);
+
         throw new \App\LogicException($message);
     }
 }

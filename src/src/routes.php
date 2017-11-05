@@ -15,15 +15,11 @@ $app->get('/api/youtube2mp3', function (Request $request, Response $response, ar
 
         $youtube = new \App\Controllers\YoutubeController($this->application, $this->logger);
 
-        $youtube->parseUri($uri);
+        $videoId = $youtube->parseUri($uri);
+        $hash    = $youtube->download();
+        $youtube->convert($hash);
 
-       // return $response->withJson($youtube->getVideoInfo());
-       // $youtube->parseStreams();
-       //
-
-       $youtube->dl();
-
-        die('OK');
+        return $response->withJson(['id' => $videoId, 'url' => "http://{$request->getUri()->getHost()}/downloads/audio/{$hash}.m4a"]);
     }
     catch(\App\LogicException $e)
     {

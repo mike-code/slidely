@@ -1,14 +1,15 @@
-version: "3"
+version: "3.2"
 
 services:
-  web:
+  # Web Stack
+  nginx:
     image: nginx
     ports:
       - 80:80
     volumes:
       - ./src:/var/www/html
       - ./nginx.conf:/etc/nginx/nginx.conf
-    links:
+    depends_on:
       - phpfpm
 
   phpfpm:
@@ -22,3 +23,76 @@ services:
     command: install
     volumes:
       - ./src:/app
+    depends_on:
+      - phpfpm
+    deploy:
+      restart_policy:
+        condition: "on-failure"
+
+  # Functions Stack
+  ffmpeg:
+    image: mikecode/ffmpeg
+    volumes:
+      - ./src/public/downloads:/files
+      - ./convert.sh:/convert.sh
+    labels:
+      function: "true"
+    depends_on:
+      - gateway
+    networks:
+      - functions
+    environment:
+      fprocess: "/bin/sh /convert.sh"
+
+  # FaaS Stack (default -- taken from OpenFaaS repo)
+  nats:
+    image: nats-streaming:0.5.0
+    ports:
+        - 4222:4222
+        - 8222:8222
+    command: "--store memory --cluster_id faas-cluster"
+    networks:
+        - functions
+
+  gateway:
+    volumes:
+        - "/var/run/docker.sock:/var/run/docker.sock"
+    ports:
+        - 8080:8080
+    image: functions/gateway:0.6.7
+    networks:
+        - default
+        - functions
+    environment:
+        dnsrr: "true"  # Temporarily use dnsrr in place of VIP while issue persists on PWD
+    depends_on:
+        - nats
+
+  prometheus:
+    image: functions/prometheus:latest  # autobuild from Dockerfile in repo.
+    command: "-config.file=/etc/prometheus/prometheus.yml -storage.local.path=/prometheus -storage.local.memory-chunks=10000 --alertmanager.url=http://alertmanager:9093"
+    ports:
+        - 9090:9090
+    depends_on:
+        - gateway
+        - alertmanager
+    environment:
+        no_proxy: "gateway"
+    networks:
+        - functions
+
+  alertmanager:
+    image: functions/alertmanager:latest    # autobuild from Dockerfile in repo.
+    environment:
+        no_proxy: "gateway"
+    command:
+        - '-config.file=/alertmanager.yml'
+    networks:
+        - functions
+    ports:
+        - 9093:9093
+
+networks:
+    functions:
+        driver: overlay
+

@@ -13,14 +13,14 @@ class YoutubeController extends GenericController
         preg_match_all($pattern, $uri, $matches) or $this->throwLogicalException('Invalid youtube URI');
 
         $this->video_id = $matches[1][0];
+
+        return $this->video_id;
     }
 
-    public function dl()
+    public function download()
     {
         $streams = $this->parseStreams();
         $stream  = $this->getOptimalStream($streams);
-
-        print_r($stream);
 
         $url  = $stream['url'] ?? $this->throwLogicalException('Missing url parameter in video_response stream object');
         preg_match("/signature=([\w]+\.[\w]+)/", $url, $out);
@@ -44,11 +44,18 @@ class YoutubeController extends GenericController
 
         $downloadUri = "{$url}&signature={$usig}";
 
-        $myId = md5($usig);
+        $videoHash = md5($usig);
 
-        $this->downloadVideo($downloadUri, $myId);
+        $this->downloadVideo($downloadUri, $videoHash);
 
-        echo $downloadUri, PHP_EOL;
+        return $videoHash;
+    }
+
+    public function convert($id)
+    {
+        $response = \Requests::post("http://gateway:8080/function/slidely_ffmpeg", [], $id,['timeout' => 600]);
+
+        $response->success or $this->throwLogicalException('Could not convert video to audio', $response->body);
     }
 
     public function parseStreams()
@@ -76,7 +83,9 @@ class YoutubeController extends GenericController
 
     private function downloadVideo($uri, $id)
     {
-        \Requests::get($uri, [], ['filename' => "{$this->app->videoDir}{$id}", 'timeout' => 300000]);
+        $response = \Requests::get($uri, [], ['filename' => "{$this->app->videoDir}{$id}", 'timeout' => 300000]);
+
+        $response->success or $this->throwLogicalException("Could not download video [{$uri}][{$response->status_code}]");
     }
 
     private function getOptimalStream($streams)
