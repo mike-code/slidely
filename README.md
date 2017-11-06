@@ -1,5 +1,5 @@
-## Install Git & pip
-`apt-get -y install git python-pip`
+## Install git
+`apt-get -y install git`
 
 ## Install Docker
 `wget -qO- https://get.docker.com/ | sh`
