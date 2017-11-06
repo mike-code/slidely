@@ -119,7 +119,8 @@ class YoutubeController extends GenericController
 
         $watchurl = urlencode("https://www.youtube.com/watch?v={$this->video_id}");
 
-        $fullurl = "https://youtube.com/get_video_info?video_id={$this->video_id}&ps=default&eurl=&gl=US&hl=en&eurl={$watchurl}";
+        // el -> detailpage seems to be universal ?
+        $fullurl = "https://youtube.com/get_video_info?video_id={$this->video_id}&el=detailpage&ps=default&eurl=&gl=US&hl=en&eurl={$watchurl}";
 
         $response = \Requests::get($fullurl);
 
