@@ -132,7 +132,7 @@ class YoutubeController extends GenericController
             $status    = $result['status']    ?? 'STATUS_NULL';
             $errorcode = $result['errorcode'] ?? 'ERRORCODE_NULL';
 
-            $this->throwLogicalException("Video status not OK  [{$status}][{$errorcode}]");
+            $this->throwLogicalException("Video status not OK  [{$status}][{$errorcode}]", "Video status not OK: " . json_encode($result));
         }
 
         if($this->app->debug)
